@@ -1,0 +1,6 @@
+{
+  "name": "Lumière Photo Atelier & Client Proofing Studio",
+  "description": "Luxury photography studio showcase and secure client proofing portal with anti-download, anti-screenshot DRM protection and administrative gallery management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
