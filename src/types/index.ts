@@ -1,7 +1,8 @@
 export interface AdminUser {
   id: string;
   username: string;
-  password: string;
+  email: string;
+  password?: string;
   name: string;
   role: 'superadmin' | 'admin';
   createdAt: string;

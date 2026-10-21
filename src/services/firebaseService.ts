@@ -24,7 +24,14 @@ import {
   getDownloadURL,
   deleteObject,
 } from 'firebase/storage';
-import { db, storage } from './firebase';
+import { initializeApp, deleteApp } from 'firebase/app';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
+import { db, storage, auth, firebaseConfig } from './firebase';
 import { AdminUser, ClientFolder, PortfolioShowcase, StudioPhoto, PricingPackage } from '../types/index';
 
 // ─── Firestore Collection Paths ───────────────────────────────────────────────
@@ -251,12 +258,29 @@ export async function deletePhotoFromStorage(url: string): Promise<void> {
   }
 }
 
-// ─── Admins (Firestore) ────────────────────────────────────────────────────────
+// ─── Admins (Firestore & Firebase Auth) ────────────────────────────────────────
+
+const SYSTEM_ADMIN_DOC_IDS = new Set([
+  SITE_CONTENT_DOC,
+  SITE_PACKAGES_DOC,
+  SITE_CATEGORIES_DOC,
+]);
+
+/**
+ * Firebase Auth enforces a minimum 6-character password on the backend.
+ * If an admin specifies a shorter password (e.g. '1234'), pad it deterministically
+ * so Firebase Auth never throws auth/weak-password while allowing the admin to type their exact password.
+ */
+export const toFirebaseAuthPassword = (pwd: string): string => {
+  return pwd.length < 6 ? `${pwd}__fp2026` : pwd;
+};
 
 export async function fetchAdmins(): Promise<AdminUser[]> {
   try {
-    const snap = await getDocs(collection(db, ADMINS_COL));
-    return snap.docs.map((d) => d.data() as AdminUser);
+    const snap = await withTimeout(getDocs(collection(db, ADMINS_COL)), 4000);
+    return snap.docs
+      .filter((d) => !SYSTEM_ADMIN_DOC_IDS.has(d.id))
+      .map((d) => d.data() as AdminUser);
   } catch (err) {
     console.warn('Could not fetch admins from Firestore:', err);
     return [];
@@ -283,10 +307,180 @@ export function subscribeAdmins(callback: (admins: AdminUser[]) => void): Unsubs
   return onSnapshot(
     collection(db, ADMINS_COL),
     (snap) => {
-      callback(snap.docs.map((d) => d.data() as AdminUser));
+      const admins = snap.docs
+        .filter((d) => !SYSTEM_ADMIN_DOC_IDS.has(d.id))
+        .map((d) => d.data() as AdminUser);
+      callback(admins);
     },
     (err) => console.warn('subscribeAdmins non-fatal error:', err)
   );
+}
+
+/**
+ * Signs in an admin using Firebase Authentication with Gmail/email and password.
+ * Special override ensures tommysugan07@gmail.com / 1234 is guaranteed master access.
+ */
+export async function firebaseLogin(
+  emailOrUser: string,
+  password: string
+): Promise<{ success: boolean; user?: AdminUser; error?: string }> {
+  const cleanInput = emailOrUser.trim().toLowerCase();
+  const cleanPwd = password.trim();
+
+  if (!cleanInput || !cleanPwd) {
+    return { success: false, error: 'Email and password are required.' };
+  }
+
+  // 1. Master Admin designated override (tommysugan07@gmail.com / 1234)
+  if (cleanInput === 'tommysugan07@gmail.com' && cleanPwd === '1234') {
+    const masterAdmin: AdminUser = {
+      id: 'admin-master',
+      username: 'tommysugan07@gmail.com',
+      email: 'tommysugan07@gmail.com',
+      password: '1234',
+      name: 'Tommy Sugan (Master Admin)',
+      role: 'superadmin',
+      createdAt: '2026-01-15T10:00:00Z',
+    };
+
+    // Attempt Firebase Auth sign-in in background without blocking master access
+    const fbPass = toFirebaseAuthPassword(cleanPwd);
+    signInWithEmailAndPassword(auth, cleanInput, fbPass).catch(() => {
+      signInWithEmailAndPassword(auth, cleanInput, cleanPwd).catch(() => {});
+    });
+
+    // Ensure Firestore admin-master record is up to date
+    saveAdmin(masterAdmin).catch((err) =>
+      console.warn('Sync master admin to firestore non-fatal note:', err)
+    );
+
+    return { success: true, user: masterAdmin };
+  }
+
+  // 2. Authenticate standard admin with Firebase Auth
+  let authSucceeded = false;
+  try {
+    const fbPass = toFirebaseAuthPassword(cleanPwd);
+    await signInWithEmailAndPassword(auth, cleanInput, fbPass);
+    authSucceeded = true;
+  } catch {
+    try {
+      await signInWithEmailAndPassword(auth, cleanInput, cleanPwd);
+      authSucceeded = true;
+    } catch {
+      // Auth failed, check Firestore fallback
+    }
+  }
+
+  // 3. Check Firestore admin record
+  const allAdmins = await fetchAdmins();
+  const matched = allAdmins.find(
+    (a) =>
+      (a.email?.toLowerCase() === cleanInput ||
+        a.username?.toLowerCase() === cleanInput) &&
+      (a.password === cleanPwd || authSucceeded)
+  );
+
+  if (matched) {
+    return { success: true, user: matched };
+  }
+
+  if (authSucceeded) {
+    // Exists in Firebase Auth, sync to Firestore
+    const createdUser: AdminUser = {
+      id: `admin-${Date.now()}`,
+      username: cleanInput,
+      email: cleanInput,
+      password: cleanPwd,
+      name: cleanInput.split('@')[0],
+      role: 'admin',
+      createdAt: new Date().toISOString(),
+    };
+    await saveAdmin(createdUser);
+    return { success: true, user: createdUser };
+  }
+
+  return { success: false, error: 'Invalid Gmail address or password.' };
+}
+
+/**
+ * Registers a new admin user in Firebase Auth and persists their record in Firestore.
+ * Uses a secondary Firebase App instance so the active admin session is not interrupted.
+ */
+export async function registerFirebaseAdmin(
+  email: string,
+  password: string,
+  name: string,
+  role: 'admin' | 'superadmin' = 'admin'
+): Promise<{ success: boolean; error?: string; admin?: AdminUser }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPassword = password.trim();
+
+  if (!cleanEmail || !cleanPassword) {
+    return { success: false, error: 'Email and password are required.' };
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(cleanEmail)) {
+    return { success: false, error: 'Please enter a valid email address (e.g. name@gmail.com).' };
+  }
+
+  if (cleanPassword.length < 4) {
+    return { success: false, error: 'Password must be at least 4 characters long.' };
+  }
+
+  // Check if admin already registered in Firestore
+  const existingAdmins = await fetchAdmins();
+  if (
+    existingAdmins.some(
+      (a) =>
+        a.email?.toLowerCase() === cleanEmail ||
+        a.username?.toLowerCase() === cleanEmail
+    )
+  ) {
+    return { success: false, error: `An admin with email "${cleanEmail}" already exists.` };
+  }
+
+  // Provision user in Firebase Auth via temporary secondary app
+  let authUid = '';
+  try {
+    const secondaryApp = initializeApp(firebaseConfig, `AdminProv_${Date.now()}`);
+    const secondaryAuth = getAuth(secondaryApp);
+    const fbPassword = toFirebaseAuthPassword(cleanPassword);
+
+    try {
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, cleanEmail, fbPassword);
+      authUid = cred.user.uid;
+    } catch (authErr: any) {
+      if (authErr.code === 'auth/email-already-in-use') {
+        // Already in Firebase Auth, safe to link in Firestore
+      } else {
+        console.warn('Firebase Auth registration warning:', authErr);
+        return {
+          success: false,
+          error: authErr.message || 'Firebase Auth registration failed.',
+        };
+      }
+    } finally {
+      await signOut(secondaryAuth).catch(() => {});
+      await deleteApp(secondaryApp).catch(() => {});
+    }
+  } catch (err: any) {
+    console.warn('Secondary app init note:', err);
+  }
+
+  const newAdmin: AdminUser = {
+    id: authUid ? `admin-${authUid}` : `admin-${Date.now()}`,
+    username: cleanEmail,
+    email: cleanEmail,
+    password: cleanPassword,
+    name: name.trim() || cleanEmail.split('@')[0],
+    role,
+    createdAt: new Date().toISOString(),
+  };
+
+  await saveAdmin(newAdmin);
+  return { success: true, admin: newAdmin };
 }
 
 // ─── Folders (Firestore) ───────────────────────────────────────────────────────

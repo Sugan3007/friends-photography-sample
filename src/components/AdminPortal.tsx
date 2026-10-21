@@ -50,10 +50,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onBackToMain,
   onOpenEventPage,
 }) => {
-  // Login form state
-  const [usernameInput, setUsernameInput] = useState('admin');
+  // Login form state (Firebase Authentication with Gmail)
+  const [emailInput, setEmailInput] = useState('tommysugan07@gmail.com');
   const [passwordInput, setPasswordInput] = useState('1234');
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Active Admin Tabs
   const [activeTab, setActiveTab] = useState<'folders' | 'works' | 'pricing' | 'admins' | 'security'>('folders');
@@ -97,12 +98,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [eventPhotoFile, setEventPhotoFile] = useState<File | null>(null);
   const [isUploadingEventPhoto, setIsUploadingEventPhoto] = useState(false);
 
-  // New Admin Modal State
+  // New Admin Modal State (Admin only adds new admins with email and password)
   const [isNewAdminOpen, setIsNewAdminOpen] = useState(false);
-  const [newAdminUsername, setNewAdminUsername] = useState('');
+  const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newAdminName, setNewAdminName] = useState('');
   const [newAdminRole, setNewAdminRole] = useState<'admin' | 'superadmin'>('admin');
+  const [isRegisteringAdmin, setIsRegisteringAdmin] = useState(false);
   const [adminCreateError, setAdminCreateError] = useState<string | null>(null);
   const [adminCreateSuccess, setAdminCreateSuccess] = useState<string | null>(null);
 
@@ -274,14 +276,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
-    const user = studioStore.authenticateAdmin(usernameInput, passwordInput);
-    if (user) {
-      onAdminLogin(user);
-    } else {
-      setLoginError('Invalid credentials. (Default is admin / 1234)');
+    setIsLoggingIn(true);
+    try {
+      const res = await studioStore.loginAdmin(emailInput, passwordInput);
+      if (res.success && res.user) {
+        onAdminLogin(res.user);
+      } else {
+        setLoginError(res.error || 'Invalid credentials. Master admin is tommysugan07@gmail.com / 1234');
+      }
+    } catch (err: any) {
+      setLoginError(err?.message || 'Authentication error.');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -320,34 +329,45 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     e.preventDefault();
     setAdminCreateError(null);
     setAdminCreateSuccess(null);
+    setIsRegisteringAdmin(true);
 
-    const res = await studioStore.createAdmin({
-      username: newAdminUsername,
-      password: newAdminPassword,
-      name: newAdminName,
-      role: newAdminRole,
-    });
+    try {
+      const res = await studioStore.createAdmin({
+        email: newAdminEmail,
+        password: newAdminPassword,
+        name: newAdminName,
+        role: newAdminRole,
+      });
 
-    if (res.success && res.admin) {
-      setAdminCreateSuccess(`Admin "${res.admin.username}" created successfully.`);
-      setNewAdminUsername('');
-      setNewAdminPassword('');
-      setNewAdminName('');
-      setTimeout(() => {
-        setIsNewAdminOpen(false);
-        setAdminCreateSuccess(null);
-      }, 1500);
-    } else {
-      setAdminCreateError(res.error || 'Failed to create admin.');
+      if (res.success && res.admin) {
+        setAdminCreateSuccess(`Admin "${res.admin.email}" registered in Firebase Auth & Firestore successfully.`);
+        setNewAdminEmail('');
+        setNewAdminPassword('');
+        setNewAdminName('');
+        setTimeout(() => {
+          setIsNewAdminOpen(false);
+          setAdminCreateSuccess(null);
+        }, 1600);
+      } else {
+        setAdminCreateError(res.error || 'Failed to register admin in Firebase.');
+      }
+    } catch (err: any) {
+      setAdminCreateError(err?.message || 'Error creating admin.');
+    } finally {
+      setIsRegisteringAdmin(false);
     }
   };
 
-  const handleDeleteAdmin = async (id: string, username: string) => {
-    if (username === 'admin') {
-      alert('The primary master admin cannot be deleted.');
+  const handleDeleteAdmin = async (id: string, email: string) => {
+    if (
+      email.toLowerCase() === 'tommysugan07@gmail.com' ||
+      email === 'admin' ||
+      id === 'admin-master'
+    ) {
+      alert('The primary master admin (tommysugan07@gmail.com) cannot be deleted.');
       return;
     }
-    if (window.confirm(`Delete admin "${username}"?`)) {
+    if (window.confirm(`Delete admin "${email}"?`)) {
       await studioStore.deleteAdmin(id);
     }
   };
@@ -461,13 +481,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           <form onSubmit={handleLoginSubmit} className="space-y-3.5">
             <div>
               <label className="block text-[11px] font-medium text-stone-300 uppercase tracking-wider mb-1">
-                Admin Username / ID
+                Admin Email / Gmail
               </label>
               <input
-                type="text"
-                value={usernameInput}
-                onChange={(e) => setUsernameInput(e.target.value)}
-                placeholder="e.g. admin"
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="e.g. tommysugan07@gmail.com"
                 className="w-full px-3.5 py-2.5 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 placeholder-stone-600 text-sm focus:outline-none focus:border-amber-400"
                 required
               />
@@ -496,17 +516,25 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
             <button
               type="submit"
-              className="w-full py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-xs tracking-wider uppercase transition-colors shadow-md"
+              disabled={isLoggingIn}
+              className="w-full py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-xs tracking-wider uppercase transition-colors shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              Sign In to Admin Console
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Signing In with Firebase…</span>
+                </>
+              ) : (
+                <span>Sign In to Admin Console</span>
+              )}
             </button>
           </form>
 
           {/* Quick credentials hint */}
           <div className="mt-6 pt-4 border-t border-stone-800 text-xs text-stone-400 space-y-0.5 bg-stone-950 p-3 rounded-xl border border-stone-800">
-            <p className="font-semibold text-stone-300 text-[11px]">Master Admin ID:</p>
+            <p className="font-semibold text-stone-300 text-[11px]">Primary Master Admin:</p>
             <p className="text-[11px]">
-              User: <code className="text-amber-300 font-mono font-bold">admin</code> • Pass: <code className="text-amber-300 font-mono font-bold">1234</code>
+              Email: <code className="text-amber-300 font-mono font-bold">tommysugan07@gmail.com</code> • Pass: <code className="text-amber-300 font-mono font-bold">1234</code>
             </p>
           </div>
         </div>
@@ -1210,7 +1238,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
           <div className="space-y-2.5">
             {admins.map((adm) => {
-              const isMaster = adm.username === 'admin';
+              const displayEmail = adm.email || adm.username;
+              const isMaster =
+                displayEmail.toLowerCase() === 'tommysugan07@gmail.com' ||
+                adm.id === 'admin-master' ||
+                adm.role === 'superadmin';
               const isPwdVisible = Boolean(visibleAdminPasswords[adm.id]);
 
               return (
@@ -1220,14 +1252,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-amber-300">{adm.username}</span>
+                      <span className="font-mono text-xs font-bold text-amber-300">{displayEmail}</span>
                       {isMaster && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-300">
-                          Primary Master
+                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-300 font-medium">
+                          Master Admin
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] text-stone-400 capitalize px-2 py-0.5 rounded bg-stone-950">
+                    <span className="text-[10px] text-stone-400 capitalize px-2 py-0.5 rounded bg-stone-950 border border-stone-800">
                       {adm.role}
                     </span>
                   </div>
@@ -1254,7 +1286,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     {!isMaster && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteAdmin(adm.id, adm.username)}
+                        onClick={() => handleDeleteAdmin(adm.id, displayEmail)}
                         className="text-[11px] text-red-400 hover:text-red-300 flex items-center gap-1"
                       >
                         <Trash2 className="w-3 h-3" /> Remove
@@ -1524,20 +1556,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           aria-modal="true"
         >
           <div className="w-full max-w-md bg-stone-900 border-t sm:border border-stone-800 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[85vh] overflow-y-auto space-y-3">
-            <h3 className="text-base font-serif text-white font-medium">Create New Studio Admin</h3>
-            <p className="text-xs text-stone-400">Only authorized admins can register new admin accounts.</p>
+            <h3 className="text-base font-serif text-white font-medium">Register New Studio Admin</h3>
+            <p className="text-xs text-stone-400">
+              Admin-only capability: Provisions new credentials in Firebase Authentication & Firestore.
+            </p>
 
             <form onSubmit={handleCreateAdmin} className="space-y-3 text-xs">
               <div>
                 <label className="block text-[11px] font-medium text-stone-300 uppercase mb-1">
-                  Admin ID / Username *
+                  Admin Email / Gmail *
                 </label>
                 <input
-                  type="text"
-                  value={newAdminUsername}
-                  onChange={(e) => setNewAdminUsername(e.target.value)}
-                  placeholder="e.g. sarah_admin"
-                  className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100"
+                  type="email"
+                  value={newAdminEmail}
+                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                  placeholder="e.g. colleague@gmail.com"
+                  className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-400"
                   required
                 />
               </div>
@@ -1550,10 +1584,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   type="text"
                   value={newAdminPassword}
                   onChange={(e) => setNewAdminPassword(e.target.value)}
-                  placeholder="Password"
-                  className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100"
+                  placeholder="Min 4 characters (e.g. securePass2026)"
+                  className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-400 font-mono"
                   required
                 />
+                <p className="text-[10px] text-stone-500 mt-0.5">Will be securely registered with Firebase Auth.</p>
               </div>
 
               <div>
@@ -1564,9 +1599,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   type="text"
                   value={newAdminName}
                   onChange={(e) => setNewAdminName(e.target.value)}
-                  placeholder="e.g. Sarah Jenkins"
-                  className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100"
+                  placeholder="e.g. Sarah Jenkins (Editor)"
+                  className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 placeholder-stone-600 focus:outline-none focus:border-amber-400"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-stone-300 uppercase mb-1">
+                  Admin Role
+                </label>
+                <select
+                  value={newAdminRole}
+                  onChange={(e) => setNewAdminRole(e.target.value as 'admin' | 'superadmin')}
+                  className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 text-xs focus:outline-none focus:border-amber-400"
+                >
+                  <option value="admin">Staff Admin (Standard)</option>
+                  <option value="superadmin">Super Admin (Master Access)</option>
+                </select>
               </div>
 
               {adminCreateError && (
@@ -1585,15 +1634,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsNewAdminOpen(false)}
+                  disabled={isRegisteringAdmin}
                   className="px-3 py-2 text-xs text-stone-400"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-amber-500 text-stone-950 font-semibold text-xs uppercase"
+                  disabled={isRegisteringAdmin}
+                  className="px-4 py-2 rounded-xl bg-amber-500 text-stone-950 font-semibold text-xs uppercase disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  Register Admin
+                  {isRegisteringAdmin ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Provisioning in Firebase…</span>
+                    </>
+                  ) : (
+                    <span>Register Admin</span>
+                  )}
                 </button>
               </div>
             </form>

@@ -21,7 +21,7 @@ const getEnv = (key: string): string => {
   return '';
 };
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: getEnv('VITE_FIREBASE_API_KEY') || 'AIzaSyBVTtmHmZoQ0psKC5gC3Z99D-vCAdNu7Ro',
   authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN') || 'infovate-41eeb.firebaseapp.com',
   databaseURL: getEnv('VITE_FIREBASE_DATABASE_URL') || 'https://infovate-41eeb-default-rtdb.firebaseio.com',

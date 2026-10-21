@@ -110,7 +110,9 @@ export const Navigation: React.FC<NavigationProps> = ({
                   aria-label="Admin Portal"
                 >
                   <UserCheck className="w-3.5 h-3.5" />
-                  <span className="max-w-[70px] truncate">{currentAdmin.username}</span>
+                  <span className="max-w-[85px] truncate">
+                    {currentAdmin.name ? currentAdmin.name.split(' ')[0] : (currentAdmin.email ? currentAdmin.email.split('@')[0] : currentAdmin.username)}
+                  </span>
                 </button>
                 <button
                   type="button"

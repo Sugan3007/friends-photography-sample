@@ -33,6 +33,8 @@ import {
   fetchCategories,
   saveCategories,
   subscribeCategories,
+  firebaseLogin,
+  registerFirebaseAdmin,
 } from './firebaseService';
 
 // ─── Default/Seed Data ────────────────────────────────────────────────────────
@@ -40,19 +42,12 @@ import {
 const DEFAULT_ADMINS: AdminUser[] = [
   {
     id: 'admin-master',
-    username: 'admin',
+    username: 'tommysugan07@gmail.com',
+    email: 'tommysugan07@gmail.com',
     password: '1234',
-    name: 'Master Studio Director',
+    name: 'Tommy Sugan (Master Admin)',
     role: 'superadmin',
     createdAt: '2026-01-15T10:00:00Z',
-  },
-  {
-    id: 'admin-lead',
-    username: 'marcus_editor',
-    password: 'studio2026password',
-    name: 'Marcus Vance (Senior Retoucher)',
-    role: 'admin',
-    createdAt: '2026-02-01T14:30:00Z',
   },
 ];
 
@@ -630,7 +625,23 @@ export async function initializeStore(): Promise<void> {
             fetchCategories(),
           ]);
 
-          if (admins && admins.length > 0) _admins = admins;
+          if (admins && admins.length > 0) {
+            const filtered = admins.filter(
+              (a) => a.username !== 'admin' && a.username !== 'marcus_editor' && a.id !== 'admin-lead'
+            );
+            const hasTommy = filtered.some(
+              (a) => a.email?.toLowerCase() === 'tommysugan07@gmail.com' || a.username?.toLowerCase() === 'tommysugan07@gmail.com'
+            );
+            if (!hasTommy) {
+              filtered.unshift(DEFAULT_ADMINS[0]);
+            }
+            _admins = filtered;
+            saveAdmin(DEFAULT_ADMINS[0]).catch(() => {});
+            removeAdmin('admin-lead').catch(() => {});
+          } else {
+            _admins = [...DEFAULT_ADMINS];
+            saveAdmin(DEFAULT_ADMINS[0]).catch(() => {});
+          }
           if (folders && folders.length > 0) {
             _folders = folders;
             saveStoredFolders(_folders);
@@ -681,7 +692,16 @@ export async function initializeStore(): Promise<void> {
       try {
         subscribeAdmins((admins) => {
           if (admins && admins.length) {
-            _admins = admins;
+            const filtered = admins.filter(
+              (a) => a.username !== 'admin' && a.username !== 'marcus_editor' && a.id !== 'admin-lead'
+            );
+            const hasTommy = filtered.some(
+              (a) => a.email?.toLowerCase() === 'tommysugan07@gmail.com' || a.username?.toLowerCase() === 'tommysugan07@gmail.com'
+            );
+            if (!hasTommy) {
+              filtered.unshift(DEFAULT_ADMINS[0]);
+            }
+            _admins = filtered;
             notifyListeners();
           }
         });
@@ -748,7 +768,7 @@ export const studioStore = {
     return _initialized;
   },
 
-  // ── ADMIN MANAGEMENT ──────────────────────────────────────────────────────
+  // ── ADMIN MANAGEMENT (FIREBASE AUTH & FIRESTORE) ──────────────────────────
 
   getAdmins(): AdminUser[] {
     return _admins;
@@ -760,36 +780,52 @@ export const studioStore = {
     notifyListeners();
   },
 
-  async createAdmin(newAdminData: Omit<AdminUser, 'id' | 'createdAt'>): Promise<{ success: boolean; error?: string; admin?: AdminUser }> {
-    const username = newAdminData.username.trim().toLowerCase();
+  async loginAdmin(
+    emailOrUser: string,
+    password: string
+  ): Promise<{ success: boolean; user?: AdminUser; error?: string }> {
+    const res = await firebaseLogin(emailOrUser, password);
+    if (res.success && res.user) {
+      if (!_admins.some((a) => a.id === res.user!.id || a.email === res.user!.email)) {
+        _admins = [..._admins, res.user];
+      }
+      notifyListeners();
+    }
+    return res;
+  },
+
+  async createAdmin(newAdminData: {
+    email: string;
+    password: string;
+    name?: string;
+    role?: 'admin' | 'superadmin';
+    username?: string;
+  }): Promise<{ success: boolean; error?: string; admin?: AdminUser }> {
+    const email = (newAdminData.email || newAdminData.username || '').trim().toLowerCase();
     const password = newAdminData.password.trim();
+    const name = (newAdminData.name || '').trim();
+    const role = newAdminData.role || 'admin';
 
-    if (!username || !password) {
-      return { success: false, error: 'Username and password are required' };
+    const res = await registerFirebaseAdmin(email, password, name, role);
+    if (res.success && res.admin) {
+      if (!_admins.some((a) => a.id === res.admin!.id || a.email === res.admin!.email)) {
+        _admins = [..._admins, res.admin];
+      }
+      notifyListeners();
     }
-
-    if (_admins.some((a) => a.username.toLowerCase() === username)) {
-      return { success: false, error: `Admin username "${username}" already exists` };
-    }
-
-    const newAdmin: AdminUser = {
-      id: `admin-${Date.now()}`,
-      username,
-      password,
-      name: newAdminData.name.trim() || username,
-      role: newAdminData.role || 'admin',
-      createdAt: new Date().toISOString(),
-    };
-
-    await saveAdmin(newAdmin);
-    _admins = [..._admins, newAdmin];
-    notifyListeners();
-    return { success: true, admin: newAdmin };
+    return res;
   },
 
   async deleteAdmin(adminId: string): Promise<boolean> {
     const target = _admins.find((a) => a.id === adminId);
-    if (!target || target.username === 'admin') return false;
+    if (
+      !target ||
+      target.id === 'admin-master' ||
+      target.email?.toLowerCase() === 'tommysugan07@gmail.com' ||
+      target.role === 'superadmin'
+    ) {
+      return false;
+    }
 
     await removeAdmin(adminId);
     _admins = _admins.filter((a) => a.id !== adminId);
@@ -797,14 +833,29 @@ export const studioStore = {
     return true;
   },
 
-  authenticateAdmin(username: string, password: string): AdminUser | null {
-    const cleanUser = username.trim().toLowerCase();
+  authenticateAdmin(emailOrUser: string, password: string): AdminUser | null {
+    const cleanUser = emailOrUser.trim().toLowerCase();
     const cleanPwd = password.trim();
-    return _admins.find((a) => a.username.toLowerCase() === cleanUser && a.password === cleanPwd) || null;
+
+    if (cleanUser === 'tommysugan07@gmail.com' && cleanPwd === '1234') {
+      return DEFAULT_ADMINS[0];
+    }
+
+    return (
+      _admins.find(
+        (a) =>
+          (a.email?.toLowerCase() === cleanUser ||
+            a.username?.toLowerCase() === cleanUser) &&
+          a.password === cleanPwd
+      ) || null
+    );
   },
 
   getAdminPasswords(): string[] {
-    return Array.from(new Set(_admins.map((a) => a.password)));
+    const passwords = _admins
+      .map((a) => a.password)
+      .filter((p): p is string => Boolean(p));
+    return Array.from(new Set(['1234', ...passwords]));
   },
 
   // ── FOLDERS & GALLERIES ───────────────────────────────────────────────────

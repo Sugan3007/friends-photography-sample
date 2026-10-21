@@ -37,7 +37,14 @@ export default function App() {
       try {
         const savedAdmin = sessionStorage.getItem('lumiere_active_admin');
         if (savedAdmin) {
-          setCurrentAdmin(JSON.parse(savedAdmin));
+          const parsed = JSON.parse(savedAdmin);
+          if (parsed && (parsed.username === 'admin' || parsed.email === 'admin')) {
+            parsed.email = 'tommysugan07@gmail.com';
+            parsed.username = 'tommysugan07@gmail.com';
+            parsed.name = 'Tommy Sugan (Master Admin)';
+            sessionStorage.setItem('lumiere_active_admin', JSON.stringify(parsed));
+          }
+          setCurrentAdmin(parsed);
         }
       } catch {
         // ignore
