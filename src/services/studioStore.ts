@@ -511,90 +511,118 @@ export async function initializeStore(): Promise<void> {
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    // Seed Firestore with defaults if collections are empty
-    await Promise.all([
-      seedIfEmpty('admins', DEFAULT_ADMINS),
-      seedIfEmpty('folders', DEFAULT_FOLDERS),
-      seedIfEmpty('portfolio', PORTFOLIO_SHOWCASE),
-    ]);
-
-    // Load initial data
-    const [admins, folders, portfolio, remoteTexts, remotePackages, remoteCategories] = await Promise.all([
-      fetchAdmins(),
-      fetchFolders(),
-      fetchPortfolio(),
-      fetchSiteTexts(),
-      fetchPricingPackages(),
-      fetchCategories(),
-    ]);
-
+    // 1. Preload local in-memory state with defaults immediately
     const deletedCats = getStoredDeletedCategories();
     const localCats = getStoredCategories();
 
-    _admins = admins;
-    _folders = folders;
-    const portfolioSource = portfolio && portfolio.length > 0 ? portfolio : PORTFOLIO_SHOWCASE;
+    _admins = [...DEFAULT_ADMINS];
+    _folders = [...DEFAULT_FOLDERS];
     _portfolio = deduplicatePortfolio(
-      portfolioSource.filter((item) => !deletedCats.has(item.category.toLowerCase().trim()))
+      PORTFOLIO_SHOWCASE.filter((item) => !deletedCats.has(item.category.toLowerCase().trim()))
     );
-
-    if (remoteCategories && Array.isArray(remoteCategories) && remoteCategories.length > 0) {
-      _categories = remoteCategories.filter((c) => !deletedCats.has(c.toLowerCase().trim()));
-      saveStoredCategories(_categories);
-    } else if (localCats && localCats.length > 0) {
+    if (localCats && localCats.length > 0) {
       _categories = localCats.filter((c) => !deletedCats.has(c.toLowerCase().trim()));
     } else {
       _categories = DEFAULT_CATEGORIES.filter((c) => !deletedCats.has(c.toLowerCase().trim()));
-      saveStoredCategories(_categories);
-      saveCategories(_categories).catch(console.error);
     }
 
-    if (remoteTexts && Object.keys(remoteTexts).length > 0) {
-      _siteTexts = { ...DEFAULT_SITE_TEXTS, ...remoteTexts };
-    } else {
-      saveSiteTexts(DEFAULT_SITE_TEXTS).catch(console.error);
-    }
+    // 2. Fetch remote Firestore data with timeout protection (max 2.5 seconds)
+    try {
+      const firestoreJob = (async () => {
+        try {
+          await Promise.all([
+            seedIfEmpty('admins', DEFAULT_ADMINS),
+            seedIfEmpty('folders', DEFAULT_FOLDERS),
+            seedIfEmpty('portfolio', PORTFOLIO_SHOWCASE),
+          ]);
 
-    if (remotePackages && remotePackages.length > 0) {
-      _packages = remotePackages;
-    } else {
-      savePricingPackages(STUDIO_PACKAGES).catch(console.error);
-    }
+          const [admins, folders, portfolio, remoteTexts, remotePackages, remoteCategories] = await Promise.all([
+            fetchAdmins(),
+            fetchFolders(),
+            fetchPortfolio(),
+            fetchSiteTexts(),
+            fetchPricingPackages(),
+            fetchCategories(),
+          ]);
 
-    _initialized = true;
-    notifyListeners();
+          if (admins && admins.length > 0) _admins = admins;
+          if (folders && folders.length > 0) _folders = folders;
+          if (portfolio && portfolio.length > 0) {
+            _portfolio = deduplicatePortfolio(
+              portfolio.filter((item) => !deletedCats.has(item.category.toLowerCase().trim()))
+            );
+          }
 
-    // Subscribe to real-time updates
-    subscribeAdmins((admins) => {
-      _admins = admins;
+          if (remoteCategories && Array.isArray(remoteCategories) && remoteCategories.length > 0) {
+            _categories = remoteCategories.filter((c) => !deletedCats.has(c.toLowerCase().trim()));
+            saveStoredCategories(_categories);
+          }
+
+          if (remoteTexts && Object.keys(remoteTexts).length > 0) {
+            _siteTexts = { ...DEFAULT_SITE_TEXTS, ...remoteTexts };
+          }
+          if (remotePackages && remotePackages.length > 0) {
+            _packages = remotePackages;
+          }
+        } catch (innerErr) {
+          console.warn('Firestore initial fetch non-fatal error:', innerErr);
+        }
+      })();
+
+      const timeoutGuard = new Promise((resolve) => setTimeout(resolve, 1200));
+      await Promise.race([firestoreJob, timeoutGuard]);
+    } catch (err) {
+      console.warn('initializeStore non-fatal error:', err);
+    } finally {
+      _initialized = true;
       notifyListeners();
-    });
-    subscribeFolders((folders) => {
-      _folders = folders;
-      notifyListeners();
-    });
-    subscribePortfolio((portfolio) => {
-      const currentDeleted = getStoredDeletedCategories();
-      const valid = portfolio.filter((item) => !currentDeleted.has(item.category.toLowerCase().trim()));
-      _portfolio = deduplicatePortfolio(valid);
-      notifyListeners();
-    });
-    subscribeCategories((cats) => {
-      if (Array.isArray(cats)) {
-        const currentDeleted = getStoredDeletedCategories();
-        _categories = cats.filter((c) => !currentDeleted.has(c.toLowerCase().trim()));
-        saveStoredCategories(_categories);
-        notifyListeners();
+
+      // Subscribe to real-time updates safely in the background
+      try {
+        subscribeAdmins((admins) => {
+          if (admins && admins.length) {
+            _admins = admins;
+            notifyListeners();
+          }
+        });
+        subscribeFolders((folders) => {
+          if (folders && folders.length) {
+            _folders = folders;
+            notifyListeners();
+          }
+        });
+        subscribePortfolio((portfolio) => {
+          if (portfolio && portfolio.length) {
+            const currentDeleted = getStoredDeletedCategories();
+            const valid = portfolio.filter((item) => !currentDeleted.has(item.category.toLowerCase().trim()));
+            _portfolio = deduplicatePortfolio(valid);
+            notifyListeners();
+          }
+        });
+        subscribeCategories((cats) => {
+          if (Array.isArray(cats)) {
+            const currentDeleted = getStoredDeletedCategories();
+            _categories = cats.filter((c) => !currentDeleted.has(c.toLowerCase().trim()));
+            saveStoredCategories(_categories);
+            notifyListeners();
+          }
+        });
+        subscribeSiteTexts((texts) => {
+          if (texts) {
+            _siteTexts = { ...DEFAULT_SITE_TEXTS, ...texts };
+            notifyListeners();
+          }
+        });
+        subscribePricingPackages((packages) => {
+          if (packages && packages.length) {
+            _packages = packages;
+            notifyListeners();
+          }
+        });
+      } catch (subErr) {
+        console.warn('Background subscription non-fatal error:', subErr);
       }
-    });
-    subscribeSiteTexts((texts) => {
-      _siteTexts = { ...DEFAULT_SITE_TEXTS, ...texts };
-      notifyListeners();
-    });
-    subscribePricingPackages((packages) => {
-      _packages = packages;
-      notifyListeners();
-    });
+    }
   })();
 
   return _initPromise;

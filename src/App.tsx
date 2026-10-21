@@ -27,7 +27,11 @@ export default function App() {
 
   // Initialize Firebase store, then restore session & handle URL params
   useEffect(() => {
-    initializeStore().then(() => {
+    let resolved = false;
+
+    const onReady = () => {
+      if (resolved) return;
+      resolved = true;
       setStoreReady(true);
 
       try {
@@ -65,7 +69,19 @@ export default function App() {
       if (viewParam === 'admin') {
         setCurrentView('admin');
       }
-    });
+    };
+
+    // Safety fallback: Never keep the user waiting on the splash screen
+    const safetyTimer = setTimeout(onReady, 1500);
+
+    initializeStore()
+      .then(onReady)
+      .catch((err) => {
+        console.warn('Store init error, proceeding with defaults:', err);
+        onReady();
+      });
+
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   const handleAdminLogin = (user: AdminUser) => {

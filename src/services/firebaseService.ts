@@ -123,8 +123,13 @@ export async function deletePhotoFromStorage(url: string): Promise<void> {
 // ─── Admins (Firestore) ────────────────────────────────────────────────────────
 
 export async function fetchAdmins(): Promise<AdminUser[]> {
-  const snap = await getDocs(collection(db, ADMINS_COL));
-  return snap.docs.map((d) => d.data() as AdminUser);
+  try {
+    const snap = await getDocs(collection(db, ADMINS_COL));
+    return snap.docs.map((d) => d.data() as AdminUser);
+  } catch (err) {
+    console.warn('Could not fetch admins from Firestore:', err);
+    return [];
+  }
 }
 
 export async function saveAdmin(admin: AdminUser): Promise<void> {
@@ -136,22 +141,36 @@ export async function removeAdmin(adminId: string): Promise<void> {
 }
 
 export function subscribeAdmins(callback: (admins: AdminUser[]) => void): Unsubscribe {
-  return onSnapshot(collection(db, ADMINS_COL), (snap) => {
-    callback(snap.docs.map((d) => d.data() as AdminUser));
-  });
+  return onSnapshot(
+    collection(db, ADMINS_COL),
+    (snap) => {
+      callback(snap.docs.map((d) => d.data() as AdminUser));
+    },
+    (err) => console.warn('subscribeAdmins non-fatal error:', err)
+  );
 }
 
 // ─── Folders (Firestore) ───────────────────────────────────────────────────────
 
 export async function fetchFolders(): Promise<ClientFolder[]> {
-  const q = query(collection(db, FOLDERS_COL), orderBy('createdAt', 'desc'));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as ClientFolder);
+  try {
+    const q = query(collection(db, FOLDERS_COL), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data() as ClientFolder);
+  } catch (err) {
+    console.warn('Could not fetch folders from Firestore:', err);
+    return [];
+  }
 }
 
 export async function fetchFolderById(id: string): Promise<ClientFolder | null> {
-  const snap = await getDoc(doc(db, FOLDERS_COL, id));
-  return snap.exists() ? (snap.data() as ClientFolder) : null;
+  try {
+    const snap = await getDoc(doc(db, FOLDERS_COL, id));
+    return snap.exists() ? (snap.data() as ClientFolder) : null;
+  } catch (err) {
+    console.warn('Could not fetch folder by id from Firestore:', err);
+    return null;
+  }
 }
 
 export async function saveFolder(folder: ClientFolder): Promise<void> {
@@ -168,16 +187,25 @@ export async function removeFolder(id: string): Promise<void> {
 
 export function subscribeFolders(callback: (folders: ClientFolder[]) => void): Unsubscribe {
   const q = query(collection(db, FOLDERS_COL), orderBy('createdAt', 'desc'));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => d.data() as ClientFolder));
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.docs.map((d) => d.data() as ClientFolder));
+    },
+    (err) => console.warn('subscribeFolders non-fatal error:', err)
+  );
 }
 
 // ─── Portfolio (Firestore) ─────────────────────────────────────────────────────
 
 export async function fetchPortfolio(): Promise<PortfolioShowcase[]> {
-  const snap = await getDocs(collection(db, PORTFOLIO_COL));
-  return snap.docs.map((d) => d.data() as PortfolioShowcase);
+  try {
+    const snap = await getDocs(collection(db, PORTFOLIO_COL));
+    return snap.docs.map((d) => d.data() as PortfolioShowcase);
+  } catch (err) {
+    console.warn('Could not fetch portfolio from Firestore:', err);
+    return [];
+  }
 }
 
 export async function savePortfolioEvent(event: PortfolioShowcase): Promise<void> {
@@ -193,9 +221,13 @@ export async function removePortfolioEvent(id: string): Promise<void> {
 }
 
 export function subscribePortfolio(callback: (portfolio: PortfolioShowcase[]) => void): Unsubscribe {
-  return onSnapshot(collection(db, PORTFOLIO_COL), (snap) => {
-    callback(snap.docs.map((d) => d.data() as PortfolioShowcase));
-  });
+  return onSnapshot(
+    collection(db, PORTFOLIO_COL),
+    (snap) => {
+      callback(snap.docs.map((d) => d.data() as PortfolioShowcase));
+    },
+    (err) => console.warn('subscribePortfolio non-fatal error:', err)
+  );
 }
 
 // ─── Site Content Texts (Firestore) ──────────────────────────────────────────
@@ -215,11 +247,15 @@ export async function saveSiteTexts(texts: Record<string, string>): Promise<void
 }
 
 export function subscribeSiteTexts(callback: (texts: Record<string, string>) => void): Unsubscribe {
-  return onSnapshot(doc(db, ADMINS_COL, SITE_CONTENT_DOC), (snap) => {
-    if (snap.exists() && snap.data().texts) {
-      callback(snap.data().texts as Record<string, string>);
-    }
-  });
+  return onSnapshot(
+    doc(db, ADMINS_COL, SITE_CONTENT_DOC),
+    (snap) => {
+      if (snap.exists() && snap.data().texts) {
+        callback(snap.data().texts as Record<string, string>);
+      }
+    },
+    (err) => console.warn('subscribeSiteTexts non-fatal error:', err)
+  );
 }
 
 // ─── Pricing Packages (Firestore) ───────────────────────────────────────────
@@ -239,11 +275,15 @@ export async function savePricingPackages(packages: PricingPackage[]): Promise<v
 }
 
 export function subscribePricingPackages(callback: (packages: PricingPackage[]) => void): Unsubscribe {
-  return onSnapshot(doc(db, ADMINS_COL, SITE_PACKAGES_DOC), (snap) => {
-    if (snap.exists() && snap.data().packages) {
-      callback(snap.data().packages as PricingPackage[]);
-    }
-  });
+  return onSnapshot(
+    doc(db, ADMINS_COL, SITE_PACKAGES_DOC),
+    (snap) => {
+      if (snap.exists() && snap.data().packages) {
+        callback(snap.data().packages as PricingPackage[]);
+      }
+    },
+    (err) => console.warn('subscribePricingPackages non-fatal error:', err)
+  );
 }
 
 // ─── Categories (Firestore) ─────────────────────────────────────────────────
@@ -263,11 +303,15 @@ export async function saveCategories(categories: string[]): Promise<void> {
 }
 
 export function subscribeCategories(callback: (categories: string[]) => void): Unsubscribe {
-  return onSnapshot(doc(db, ADMINS_COL, SITE_CATEGORIES_DOC), (snap) => {
-    if (snap.exists() && snap.data().categories) {
-      callback(snap.data().categories as string[]);
-    }
-  });
+  return onSnapshot(
+    doc(db, ADMINS_COL, SITE_CATEGORIES_DOC),
+    (snap) => {
+      if (snap.exists() && snap.data().categories) {
+        callback(snap.data().categories as string[]);
+      }
+    },
+    (err) => console.warn('subscribeCategories non-fatal error:', err)
+  );
 }
 
 // ─── Seed Helper ──────────────────────────────────────────────────────────────
@@ -280,10 +324,14 @@ export async function seedIfEmpty<T extends { id: string }>(
   collectionName: string,
   defaultData: T[]
 ): Promise<void> {
-  const snap = await getDocs(collection(db, collectionName));
-  if (snap.empty) {
-    await Promise.all(
-      defaultData.map((item) => setDoc(doc(db, collectionName, item.id), item))
-    );
+  try {
+    const snap = await getDocs(collection(db, collectionName));
+    if (snap.empty) {
+      await Promise.all(
+        defaultData.map((item) => setDoc(doc(db, collectionName, item.id), item))
+      );
+    }
+  } catch (err) {
+    console.warn(`Could not seed ${collectionName} in Firestore (non-fatal):`, err);
   }
 }
