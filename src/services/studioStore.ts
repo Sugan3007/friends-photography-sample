@@ -687,7 +687,13 @@ export async function initializeStore(): Promise<void> {
         });
         subscribeFolders((folders) => {
           if (folders && folders.length) {
-            _folders = folders;
+            const seen = new Set<string>();
+            _folders = folders.filter((f) => {
+              if (seen.has(f.id)) return false;
+              seen.add(f.id);
+              return true;
+            });
+            saveStoredFolders(_folders);
             notifyListeners();
           }
         });
@@ -829,31 +835,53 @@ export const studioStore = {
     watermarkText?: string;
     initialPhotos?: StudioPhoto[];
   }): Promise<ClientFolder> {
+    const cleanName = folderData.name.trim();
+    const cleanClient = folderData.clientName.trim();
+
+    // Check for existing folder with same name and client to prevent rapid double-creation
+    const existing = _folders.find(
+      (f) =>
+        f.name.toLowerCase().trim() === cleanName.toLowerCase() &&
+        f.clientName.toLowerCase().trim() === cleanClient.toLowerCase()
+    );
+    if (existing) {
+      return existing;
+    }
+
     const id = `folder-${Date.now()}`;
-    const slug = generateFolderSlug(folderData.name);
+    const slug = generateFolderSlug(cleanName);
 
     const newFolder: ClientFolder = {
       id,
       slug,
-      name: folderData.name.trim(),
-      clientName: folderData.clientName.trim(),
+      name: cleanName,
+      clientName: cleanClient,
       clientEmail: folderData.clientEmail?.trim(),
       clientPassword: folderData.clientPassword.trim() || 'proof2026',
       category: folderData.category || 'Portfolio',
       eventDate: folderData.eventDate || new Date().toISOString().split('T')[0],
       targetSelectionCount: folderData.targetSelectionCount || 10,
       notes: folderData.notes?.trim() || 'Select your favorite images.',
-      watermarkText: folderData.watermarkText?.trim() || `PROOF ONLY — ${folderData.clientName.toUpperCase()} — DO NOT COPY`,
+      watermarkText: folderData.watermarkText?.trim() || `PROOF ONLY — ${cleanClient.toUpperCase()} — DO NOT COPY`,
       photos: folderData.initialPhotos || [],
       selections: {},
       selectionSubmitted: false,
       createdAt: new Date().toISOString(),
     };
 
-    await saveFolder(newFolder);
-    _folders = [newFolder, ..._folders];
+    if (!_folders.some((f) => f.id === newFolder.id)) {
+      _folders = [newFolder, ..._folders];
+    }
+    const seen = new Set<string>();
+    _folders = _folders.filter((f) => {
+      if (seen.has(f.id)) return false;
+      seen.add(f.id);
+      return true;
+    });
+
     saveStoredFolders(_folders);
     notifyListeners();
+    await saveFolder(newFolder);
     return newFolder;
   },
 

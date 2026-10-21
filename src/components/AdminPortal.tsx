@@ -77,6 +77,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   // New Folder Modal
   const [isNewFolderOpen, setIsNewFolderOpen] = useState(false);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
@@ -286,25 +287,33 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isCreatingFolder) return;
     if (!folderName.trim() || !clientName.trim()) return;
 
-    await studioStore.createFolder({
-      name: folderName,
-      clientName: clientName,
-      clientEmail: clientEmail,
-      clientPassword: clientPassword,
-      category,
-      targetSelectionCount: Number(targetSelections) || 10,
-      notes: folderNotes,
-      watermarkText: watermarkText || `PROOF ONLY — ${clientName.toUpperCase()} — DO NOT REPRODUCE`,
-    });
+    try {
+      setIsCreatingFolder(true);
+      await studioStore.createFolder({
+        name: folderName,
+        clientName: clientName,
+        clientEmail: clientEmail,
+        clientPassword: clientPassword,
+        category,
+        targetSelectionCount: Number(targetSelections) || 10,
+        notes: folderNotes,
+        watermarkText: watermarkText || `PROOF ONLY — ${clientName.toUpperCase()} — DO NOT REPRODUCE`,
+      });
 
-    setIsNewFolderOpen(false);
-    setFolderName('');
-    setClientName('');
-    setClientEmail('');
-    setClientPassword(generateSafeClientPasscode());
-    setWatermarkText('');
+      setIsNewFolderOpen(false);
+      setFolderName('');
+      setClientName('');
+      setClientEmail('');
+      setClientPassword(generateSafeClientPasscode());
+      setWatermarkText('');
+    } catch (err) {
+      console.error('Failed to create folder:', err);
+    } finally {
+      setIsCreatingFolder(false);
+    }
   };
 
   const handleCreateAdmin = async (e: React.FormEvent) => {
@@ -1393,9 +1402,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-amber-500 text-stone-950 font-semibold text-xs tracking-wider uppercase"
+                  disabled={isCreatingFolder}
+                  className="px-4 py-2 rounded-xl bg-amber-500 text-stone-950 font-semibold text-xs tracking-wider uppercase disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  Create Folder
+                  {isCreatingFolder ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Creating…</span>
+                    </>
+                  ) : (
+                    <span>Create Folder</span>
+                  )}
                 </button>
               </div>
             </form>

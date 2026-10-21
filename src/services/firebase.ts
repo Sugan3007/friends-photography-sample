@@ -22,13 +22,13 @@ const getEnv = (key: string): string => {
 };
 
 const firebaseConfig = {
-  apiKey: getEnv('VITE_FIREBASE_API_KEY') || 'AIzaSyPlaceholderKeyForBuildSafety',
-  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN') || 'sample.firebaseapp.com',
-  databaseURL: getEnv('VITE_FIREBASE_DATABASE_URL') || 'https://sample.firebaseio.com',
-  projectId: getEnv('VITE_FIREBASE_PROJECT_ID') || 'sample-project',
-  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET') || 'sample.appspot.com',
-  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID') || '000000000000',
-  appId: getEnv('VITE_FIREBASE_APP_ID') || '1:000000000000:web:000000000000',
+  apiKey: getEnv('VITE_FIREBASE_API_KEY') || 'AIzaSyBVTtmHmZoQ0psKC5gC3Z99D-vCAdNu7Ro',
+  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN') || 'infovate-41eeb.firebaseapp.com',
+  databaseURL: getEnv('VITE_FIREBASE_DATABASE_URL') || 'https://infovate-41eeb-default-rtdb.firebaseio.com',
+  projectId: getEnv('VITE_FIREBASE_PROJECT_ID') || 'infovate-41eeb',
+  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET') || 'infovate-41eeb.firebasestorage.app',
+  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID') || '687057728339',
+  appId: getEnv('VITE_FIREBASE_APP_ID') || '1:687057728339:web:031b874ae916612c2827a6',
 };
 
 // Prevent duplicate app initialization on HMR reloads

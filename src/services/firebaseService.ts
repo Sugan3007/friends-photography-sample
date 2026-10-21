@@ -124,19 +124,38 @@ export async function uploadPhotoToStorage(
 
   try {
     return await new Promise<string>((resolve, reject) => {
+      let isSettled = false;
       const uploadTask = uploadBytesResumable(storageRef, file, metadata);
+
+      // If storage stalls due to CORS, network drops, or auth delay, abort after 8s and fall back
+      const timer = setTimeout(() => {
+        if (!isSettled) {
+          isSettled = true;
+          try {
+            uploadTask.cancel();
+          } catch {}
+          reject(new Error('Firebase Storage upload timed out after 8s'));
+        }
+      }, 8000);
 
       uploadTask.on(
         'state_changed',
         (snapshot) => {
+          if (isSettled) return;
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
           onProgress?.(progress, file.name);
         },
         (error) => {
+          if (isSettled) return;
+          isSettled = true;
+          clearTimeout(timer);
           console.warn('Firebase Storage upload failed (falling back to optimized data URL):', error);
           reject(error);
         },
         async () => {
+          if (isSettled) return;
+          isSettled = true;
+          clearTimeout(timer);
           try {
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
             resolve(downloadURL);
@@ -169,19 +188,38 @@ export async function uploadEventPhotoToStorage(
 
   try {
     return await new Promise<string>((resolve, reject) => {
+      let isSettled = false;
       const uploadTask = uploadBytesResumable(storageRef, file, metadata);
+
+      // If storage stalls due to CORS, network drops, or auth delay, abort after 8s and fall back
+      const timer = setTimeout(() => {
+        if (!isSettled) {
+          isSettled = true;
+          try {
+            uploadTask.cancel();
+          } catch {}
+          reject(new Error('Firebase Storage upload timed out after 8s'));
+        }
+      }, 8000);
 
       uploadTask.on(
         'state_changed',
         (snapshot) => {
+          if (isSettled) return;
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
           onProgress?.(progress, file.name);
         },
         (error) => {
+          if (isSettled) return;
+          isSettled = true;
+          clearTimeout(timer);
           console.warn('Firebase Storage event upload failed (falling back to optimized data URL):', error);
           reject(error);
         },
         async () => {
+          if (isSettled) return;
+          isSettled = true;
+          clearTimeout(timer);
           try {
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
             resolve(downloadURL);
