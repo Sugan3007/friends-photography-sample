@@ -27,16 +27,27 @@ export const EditableText: React.FC<EditableTextProps> = ({
   onSave,
   children,
 }) => {
-  // Read value from store or fallback
-  const storeValue = studioStore.getSiteText(textKey, defaultText);
-  const displayValue = storeValue || defaultText || (typeof children === 'string' ? children : '');
+  // Read value from store and listen to reactive store updates
+  const [currentStoreText, setCurrentStoreText] = useState(() =>
+    studioStore.getSiteText(textKey, defaultText)
+  );
+
+  useEffect(() => {
+    const unsub = studioStore.subscribe(() => {
+      const val = studioStore.getSiteText(textKey, defaultText);
+      setCurrentStoreText(val);
+    });
+    return unsub;
+  }, [textKey, defaultText]);
+
+  const displayValue = currentStoreText || defaultText || (typeof children === 'string' ? children : '');
 
   const [isEditing, setIsEditing] = useState(false);
   const [draftValue, setDraftValue] = useState(displayValue);
   const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
-  // Sync draft when storeValue changes externally
+  // Sync draft when displayValue changes externally
   useEffect(() => {
     if (!isEditing) {
       setDraftValue(displayValue);
@@ -78,11 +89,11 @@ export const EditableText: React.FC<EditableTextProps> = ({
       } else {
         await studioStore.updateSiteText(textKey, clean);
       }
-      setIsEditing(false);
     } catch (err) {
       console.error('Failed to save editable text:', err);
     } finally {
       setIsSaving(false);
+      setIsEditing(false);
     }
   };
 

@@ -40,10 +40,23 @@ const SITE_CATEGORIES_DOC = 'site_categories';
 export type UploadProgressCallback = (progress: number, fileName: string) => void;
 
 /**
+ * Wraps a promise with a timeout so Firestore network delays never hang execution.
+ */
+export function withTimeout<T>(promise: Promise<T>, ms = 5000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Operation timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+/**
  * Fallback helper: reads a File and produces an optimized WebP/JPEG data URL
  * if Firebase Storage upload is blocked by security rules, CORS, or quota.
+ * Generates compact images (max 800px, quality 0.65) so documents never exceed Firestore 1MB limit.
  */
-export async function fileToOptimizedDataUrl(file: File, maxWidth = 1600, quality = 0.82): Promise<string> {
+export async function fileToOptimizedDataUrl(file: File, maxWidth = 800, quality = 0.65): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -85,6 +98,16 @@ export async function fileToOptimizedDataUrl(file: File, maxWidth = 1600, qualit
   });
 }
 
+function resolveFileMimeType(file: File): string {
+  if (file.type && file.type.startsWith('image/')) return file.type;
+  if (/\.png$/i.test(file.name)) return 'image/png';
+  if (/\.webp$/i.test(file.name)) return 'image/webp';
+  if (/\.gif$/i.test(file.name)) return 'image/gif';
+  if (/\.avif$/i.test(file.name)) return 'image/avif';
+  if (/\.svg$/i.test(file.name)) return 'image/svg+xml';
+  return 'image/jpeg';
+}
+
 /**
  * Uploads a single File to Firebase Storage and returns the public download URL.
  * Path: studio-photos/{folderId}/{timestamp}_{filename}
@@ -97,10 +120,11 @@ export async function uploadPhotoToStorage(
 ): Promise<string> {
   const safeFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
   const storageRef = ref(storage, `studio-photos/${folderId}/${Date.now()}_${safeFileName}`);
+  const metadata = { contentType: resolveFileMimeType(file) };
 
   try {
     return await new Promise<string>((resolve, reject) => {
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      const uploadTask = uploadBytesResumable(storageRef, file, metadata);
 
       uploadTask.on(
         'state_changed',
@@ -113,15 +137,19 @@ export async function uploadPhotoToStorage(
           reject(error);
         },
         async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(downloadURL);
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(downloadURL);
+          } catch (urlErr) {
+            reject(urlErr);
+          }
         }
       );
     });
   } catch (err) {
     console.warn('Using local optimized data URL fallback for photo:', file.name, err);
     onProgress?.(100, file.name);
-    return await fileToOptimizedDataUrl(file);
+    return await fileToOptimizedDataUrl(file, 800, 0.65);
   }
 }
 
@@ -137,10 +165,11 @@ export async function uploadEventPhotoToStorage(
 ): Promise<string> {
   const safeFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
   const storageRef = ref(storage, `portfolio-photos/${eventId}/${Date.now()}_${safeFileName}`);
+  const metadata = { contentType: resolveFileMimeType(file) };
 
   try {
     return await new Promise<string>((resolve, reject) => {
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      const uploadTask = uploadBytesResumable(storageRef, file, metadata);
 
       uploadTask.on(
         'state_changed',
@@ -153,15 +182,19 @@ export async function uploadEventPhotoToStorage(
           reject(error);
         },
         async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve(downloadURL);
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(downloadURL);
+          } catch (urlErr) {
+            reject(urlErr);
+          }
         }
       );
     });
   } catch (err) {
     console.warn('Using local optimized data URL fallback for event photo:', file.name, err);
     onProgress?.(100, file.name);
-    return await fileToOptimizedDataUrl(file);
+    return await fileToOptimizedDataUrl(file, 800, 0.65);
   }
 }
 
@@ -194,7 +227,7 @@ export async function fetchAdmins(): Promise<AdminUser[]> {
 
 export async function saveAdmin(admin: AdminUser): Promise<void> {
   try {
-    await setDoc(doc(db, ADMINS_COL, admin.id), admin);
+    await withTimeout(setDoc(doc(db, ADMINS_COL, admin.id), admin, { merge: true }), 4000);
   } catch (err) {
     console.warn('saveAdmin Firestore error (saved locally):', err);
   }
@@ -202,7 +235,7 @@ export async function saveAdmin(admin: AdminUser): Promise<void> {
 
 export async function removeAdmin(adminId: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, ADMINS_COL, adminId));
+    await withTimeout(deleteDoc(doc(db, ADMINS_COL, adminId)), 4000);
   } catch (err) {
     console.warn('removeAdmin Firestore error:', err);
   }
@@ -223,7 +256,7 @@ export function subscribeAdmins(callback: (admins: AdminUser[]) => void): Unsubs
 export async function fetchFolders(): Promise<ClientFolder[]> {
   try {
     const q = query(collection(db, FOLDERS_COL), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
+    const snap = await withTimeout(getDocs(q), 4000);
     return snap.docs.map((d) => d.data() as ClientFolder);
   } catch (err) {
     console.warn('Could not fetch folders from Firestore:', err);
@@ -233,7 +266,7 @@ export async function fetchFolders(): Promise<ClientFolder[]> {
 
 export async function fetchFolderById(id: string): Promise<ClientFolder | null> {
   try {
-    const snap = await getDoc(doc(db, FOLDERS_COL, id));
+    const snap = await withTimeout(getDoc(doc(db, FOLDERS_COL, id)), 4000);
     return snap.exists() ? (snap.data() as ClientFolder) : null;
   } catch (err) {
     console.warn('Could not fetch folder by id from Firestore:', err);
@@ -243,7 +276,7 @@ export async function fetchFolderById(id: string): Promise<ClientFolder | null> 
 
 export async function saveFolder(folder: ClientFolder): Promise<void> {
   try {
-    await setDoc(doc(db, FOLDERS_COL, folder.id), folder);
+    await withTimeout(setDoc(doc(db, FOLDERS_COL, folder.id), folder, { merge: true }), 4000);
   } catch (err) {
     console.warn('saveFolder Firestore error (saved locally):', err);
   }
@@ -251,7 +284,7 @@ export async function saveFolder(folder: ClientFolder): Promise<void> {
 
 export async function updateFolderDoc(id: string, updates: Partial<ClientFolder>): Promise<void> {
   try {
-    await updateDoc(doc(db, FOLDERS_COL, id), updates as Record<string, unknown>);
+    await withTimeout(setDoc(doc(db, FOLDERS_COL, id), updates as Record<string, unknown>, { merge: true }), 4000);
   } catch (err) {
     console.warn('updateFolderDoc Firestore error (saved locally):', err);
   }
@@ -259,7 +292,7 @@ export async function updateFolderDoc(id: string, updates: Partial<ClientFolder>
 
 export async function removeFolder(id: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, FOLDERS_COL, id));
+    await withTimeout(deleteDoc(doc(db, FOLDERS_COL, id)), 4000);
   } catch (err) {
     console.warn('removeFolder Firestore error:', err);
   }
@@ -280,7 +313,7 @@ export function subscribeFolders(callback: (folders: ClientFolder[]) => void): U
 
 export async function fetchPortfolio(): Promise<PortfolioShowcase[]> {
   try {
-    const snap = await getDocs(collection(db, PORTFOLIO_COL));
+    const snap = await withTimeout(getDocs(collection(db, PORTFOLIO_COL)), 4000);
     return snap.docs.map((d) => d.data() as PortfolioShowcase);
   } catch (err) {
     console.warn('Could not fetch portfolio from Firestore:', err);
@@ -290,7 +323,7 @@ export async function fetchPortfolio(): Promise<PortfolioShowcase[]> {
 
 export async function savePortfolioEvent(event: PortfolioShowcase): Promise<void> {
   try {
-    await setDoc(doc(db, PORTFOLIO_COL, event.id), event);
+    await withTimeout(setDoc(doc(db, PORTFOLIO_COL, event.id), event, { merge: true }), 4000);
   } catch (err) {
     console.warn('savePortfolioEvent Firestore error (saved locally):', err);
   }
@@ -298,7 +331,7 @@ export async function savePortfolioEvent(event: PortfolioShowcase): Promise<void
 
 export async function updatePortfolioEvent(id: string, updates: Partial<PortfolioShowcase>): Promise<void> {
   try {
-    await updateDoc(doc(db, PORTFOLIO_COL, id), updates as Record<string, unknown>);
+    await withTimeout(setDoc(doc(db, PORTFOLIO_COL, id), updates as Record<string, unknown>, { merge: true }), 4000);
   } catch (err) {
     console.warn('updatePortfolioEvent Firestore error (saved locally):', err);
   }
@@ -306,7 +339,7 @@ export async function updatePortfolioEvent(id: string, updates: Partial<Portfoli
 
 export async function removePortfolioEvent(id: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, PORTFOLIO_COL, id));
+    await withTimeout(deleteDoc(doc(db, PORTFOLIO_COL, id)), 4000);
   } catch (err) {
     console.warn('removePortfolioEvent Firestore error:', err);
   }
@@ -326,7 +359,7 @@ export function subscribePortfolio(callback: (portfolio: PortfolioShowcase[]) =>
 
 export async function fetchSiteTexts(): Promise<Record<string, string> | null> {
   try {
-    const snap = await getDoc(doc(db, ADMINS_COL, SITE_CONTENT_DOC));
+    const snap = await withTimeout(getDoc(doc(db, ADMINS_COL, SITE_CONTENT_DOC)), 4000);
     return snap.exists() ? (snap.data().texts as Record<string, string>) : null;
   } catch (err) {
     console.warn('Could not fetch site texts:', err);
@@ -336,7 +369,10 @@ export async function fetchSiteTexts(): Promise<Record<string, string> | null> {
 
 export async function saveSiteTexts(texts: Record<string, string>): Promise<void> {
   try {
-    await setDoc(doc(db, ADMINS_COL, SITE_CONTENT_DOC), { texts, updatedAt: new Date().toISOString() }, { merge: true });
+    await withTimeout(
+      setDoc(doc(db, ADMINS_COL, SITE_CONTENT_DOC), { texts, updatedAt: new Date().toISOString() }, { merge: true }),
+      4000
+    );
   } catch (err) {
     console.warn('saveSiteTexts Firestore error (saved locally):', err);
   }
@@ -358,7 +394,7 @@ export function subscribeSiteTexts(callback: (texts: Record<string, string>) => 
 
 export async function fetchPricingPackages(): Promise<PricingPackage[] | null> {
   try {
-    const snap = await getDoc(doc(db, ADMINS_COL, SITE_PACKAGES_DOC));
+    const snap = await withTimeout(getDoc(doc(db, ADMINS_COL, SITE_PACKAGES_DOC)), 4000);
     return snap.exists() ? (snap.data().packages as PricingPackage[]) : null;
   } catch (err) {
     console.warn('Could not fetch pricing packages:', err);
@@ -368,7 +404,10 @@ export async function fetchPricingPackages(): Promise<PricingPackage[] | null> {
 
 export async function savePricingPackages(packages: PricingPackage[]): Promise<void> {
   try {
-    await setDoc(doc(db, ADMINS_COL, SITE_PACKAGES_DOC), { packages, updatedAt: new Date().toISOString() });
+    await withTimeout(
+      setDoc(doc(db, ADMINS_COL, SITE_PACKAGES_DOC), { packages, updatedAt: new Date().toISOString() }, { merge: true }),
+      4000
+    );
   } catch (err) {
     console.warn('savePricingPackages Firestore error (saved locally):', err);
   }
@@ -390,7 +429,7 @@ export function subscribePricingPackages(callback: (packages: PricingPackage[]) 
 
 export async function fetchCategories(): Promise<string[] | null> {
   try {
-    const snap = await getDoc(doc(db, ADMINS_COL, SITE_CATEGORIES_DOC));
+    const snap = await withTimeout(getDoc(doc(db, ADMINS_COL, SITE_CATEGORIES_DOC)), 4000);
     return snap.exists() ? (snap.data().categories as string[]) : null;
   } catch (err) {
     console.warn('Could not fetch categories from Firestore:', err);
@@ -400,7 +439,10 @@ export async function fetchCategories(): Promise<string[] | null> {
 
 export async function saveCategories(categories: string[]): Promise<void> {
   try {
-    await setDoc(doc(db, ADMINS_COL, SITE_CATEGORIES_DOC), { categories, updatedAt: new Date().toISOString() });
+    await withTimeout(
+      setDoc(doc(db, ADMINS_COL, SITE_CATEGORIES_DOC), { categories, updatedAt: new Date().toISOString() }, { merge: true }),
+      4000
+    );
   } catch (err) {
     console.warn('saveCategories Firestore error (saved locally):', err);
   }

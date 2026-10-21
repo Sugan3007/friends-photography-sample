@@ -49,6 +49,17 @@ export const EventGalleryView: React.FC<EventGalleryViewProps> = ({
   const [setAsCoverChecked, setSetAsCoverChecked] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Sync event from store reactively
+  React.useEffect(() => {
+    const unsub = studioStore.subscribe(() => {
+      const updated = studioStore.getPortfolioEventById(currentEvent.id);
+      if (updated) {
+        setCurrentEvent(updated);
+      }
+    });
+    return unsub;
+  }, [currentEvent.id]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -59,7 +70,10 @@ export const EventGalleryView: React.FC<EventGalleryViewProps> = ({
    * No link or description needed!
    */
   const handleUploadFiles = async (files: FileList | File[], forceAsCover = false) => {
-    const fileArray = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    const isImageFile = (f: File) =>
+      Boolean(f.type && f.type.startsWith('image/')) ||
+      /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif|svg)$/i.test(f.name);
+    const fileArray = Array.from(files).filter(isImageFile);
     if (fileArray.length === 0) return;
 
     setIsUploading(true);

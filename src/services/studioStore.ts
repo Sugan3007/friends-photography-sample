@@ -885,11 +885,11 @@ export const studioStore = {
     if (!folder) return null;
 
     const updated: ClientFolder = { ...folder, photos: [...folder.photos, ...newPhotos] };
-    await updateFolderDoc(folderId, { photos: updated.photos });
     const index = _folders.findIndex((f) => f.id === folderId);
     _folders[index] = updated;
     saveStoredFolders(_folders);
     notifyListeners();
+    await saveFolder(updated);
     return updated;
   },
 
@@ -902,11 +902,11 @@ export const studioStore = {
     if (updatedSelections[photoId]) delete updatedSelections[photoId];
 
     const updated: ClientFolder = { ...folder, photos: updatedPhotos, selections: updatedSelections };
-    await updateFolderDoc(folderId, { photos: updatedPhotos, selections: updatedSelections });
     const index = _folders.findIndex((f) => f.id === folderId);
     _folders[index] = updated;
     saveStoredFolders(_folders);
     notifyListeners();
+    await saveFolder(updated);
     return updated;
   },
 
@@ -998,12 +998,12 @@ export const studioStore = {
 
     const updatedImages = [...(event.images || []), newImage];
     const updatedEvent = { ...event, images: updatedImages, imageUrl: event.imageUrl || newImage.url };
-    await updatePortfolioEvent(eventId, { images: updatedImages, imageUrl: updatedEvent.imageUrl });
-
     const index = _portfolio.findIndex((item) => item.id === eventId);
     _portfolio[index] = updatedEvent;
     saveStoredPortfolio(_portfolio);
     notifyListeners();
+
+    await savePortfolioEvent(updatedEvent);
     return updatedEvent;
   },
 
@@ -1020,12 +1020,12 @@ export const studioStore = {
     }
 
     const updatedEvent = { ...event, images: updatedImages, imageUrl: updatedImageUrl };
-    await updatePortfolioEvent(eventId, { images: updatedImages, imageUrl: updatedImageUrl });
-
     const index = _portfolio.findIndex((item) => item.id === eventId);
     _portfolio[index] = updatedEvent;
     saveStoredPortfolio(_portfolio);
     notifyListeners();
+
+    await savePortfolioEvent(updatedEvent);
     return updatedEvent;
   },
 
@@ -1034,11 +1034,12 @@ export const studioStore = {
     if (!event) return null;
 
     const updatedEvent = { ...event, imageUrl };
-    await updatePortfolioEvent(eventId, { imageUrl });
     const index = _portfolio.findIndex((item) => item.id === eventId);
     _portfolio[index] = updatedEvent;
     saveStoredPortfolio(_portfolio);
     notifyListeners();
+
+    await savePortfolioEvent(updatedEvent);
     return updatedEvent;
   },
 
@@ -1047,10 +1048,11 @@ export const studioStore = {
     if (index === -1) return null;
 
     const updatedEvent = { ..._portfolio[index], ...updates };
-    await updatePortfolioEvent(eventId, updates);
     _portfolio[index] = updatedEvent;
     saveStoredPortfolio(_portfolio);
     notifyListeners();
+
+    await savePortfolioEvent(updatedEvent);
     return updatedEvent;
   },
 
@@ -1183,14 +1185,18 @@ export const studioStore = {
     _siteTexts = { ..._siteTexts, [key]: value };
     saveStoredSiteTexts(_siteTexts);
     notifyListeners();
-    await saveSiteTexts(_siteTexts);
+    saveSiteTexts(_siteTexts).catch((err) =>
+      console.warn('saveSiteTexts background error:', err)
+    );
   },
 
   async updateSiteTexts(updates: Record<string, string>): Promise<void> {
     _siteTexts = { ..._siteTexts, ...updates };
     saveStoredSiteTexts(_siteTexts);
     notifyListeners();
-    await saveSiteTexts(_siteTexts);
+    saveSiteTexts(_siteTexts).catch((err) =>
+      console.warn('saveSiteTexts background error:', err)
+    );
   },
 
   // ── PRICING PACKAGES ──────────────────────────────────────────────────────
@@ -1212,7 +1218,9 @@ export const studioStore = {
     _packages = newPackages;
     saveStoredPackages(_packages);
     notifyListeners();
-    await savePricingPackages(_packages);
+    savePricingPackages(_packages).catch((err) =>
+      console.warn('savePricingPackages background error:', err)
+    );
     return updated;
   },
 
@@ -1224,7 +1232,9 @@ export const studioStore = {
     _packages = [..._packages, newPkg];
     saveStoredPackages(_packages);
     notifyListeners();
-    await savePricingPackages(_packages);
+    savePricingPackages(_packages).catch((err) =>
+      console.warn('savePricingPackages background error:', err)
+    );
     return newPkg;
   },
 
@@ -1234,7 +1244,9 @@ export const studioStore = {
     _packages = _packages.filter((p) => p.id !== id);
     saveStoredPackages(_packages);
     notifyListeners();
-    await savePricingPackages(_packages);
+    savePricingPackages(_packages).catch((err) =>
+      console.warn('savePricingPackages background error:', err)
+    );
     return true;
   },
 
