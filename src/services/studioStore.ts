@@ -469,6 +469,67 @@ function saveStoredCategories(categories: string[]): void {
   } catch {}
 }
 
+const SITE_TEXTS_STORAGE_KEY = 'lumiere_site_texts';
+const PACKAGES_STORAGE_KEY = 'lumiere_packages';
+const FOLDERS_STORAGE_KEY = 'lumiere_folders';
+const PORTFOLIO_STORAGE_KEY = 'lumiere_portfolio';
+
+function getStoredSiteTexts(): Record<string, string> | null {
+  try {
+    const raw = localStorage.getItem(SITE_TEXTS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function saveStoredSiteTexts(texts: Record<string, string>): void {
+  try {
+    localStorage.setItem(SITE_TEXTS_STORAGE_KEY, JSON.stringify(texts));
+  } catch {}
+}
+
+function getStoredPackages(): PricingPackage[] | null {
+  try {
+    const raw = localStorage.getItem(PACKAGES_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function saveStoredPackages(pkgs: PricingPackage[]): void {
+  try {
+    localStorage.setItem(PACKAGES_STORAGE_KEY, JSON.stringify(pkgs));
+  } catch {}
+}
+
+function getStoredFolders(): ClientFolder[] | null {
+  try {
+    const raw = localStorage.getItem(FOLDERS_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function saveStoredFolders(folders: ClientFolder[]): void {
+  try {
+    localStorage.setItem(FOLDERS_STORAGE_KEY, JSON.stringify(folders));
+  } catch {}
+}
+
+function getStoredPortfolio(): PortfolioShowcase[] | null {
+  try {
+    const raw = localStorage.getItem(PORTFOLIO_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function saveStoredPortfolio(portfolio: PortfolioShowcase[]): void {
+  try {
+    localStorage.setItem(PORTFOLIO_STORAGE_KEY, JSON.stringify(portfolio));
+  } catch {}
+}
+
 function deduplicatePortfolio(items: PortfolioShowcase[]): PortfolioShowcase[] {
   const seen = new Set<string>();
   const result: PortfolioShowcase[] = [];
@@ -511,22 +572,36 @@ export async function initializeStore(): Promise<void> {
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
-    // 1. Preload local in-memory state with defaults immediately
+    // 1. Preload local in-memory state with defaults and any saved local data immediately
     const deletedCats = getStoredDeletedCategories();
     const localCats = getStoredCategories();
+    const localTexts = getStoredSiteTexts();
+    const localPackages = getStoredPackages();
+    const localFolders = getStoredFolders();
+    const localPortfolio = getStoredPortfolio();
 
     _admins = [...DEFAULT_ADMINS];
-    _folders = [...DEFAULT_FOLDERS];
+    _folders = localFolders && localFolders.length > 0 ? localFolders : [...DEFAULT_FOLDERS];
     _portfolio = deduplicatePortfolio(
-      PORTFOLIO_SHOWCASE.filter((item) => !deletedCats.has(item.category.toLowerCase().trim()))
+      (localPortfolio && localPortfolio.length > 0 ? localPortfolio : PORTFOLIO_SHOWCASE)
+        .filter((item) => !deletedCats.has(item.category.toLowerCase().trim()))
     );
+
     if (localCats && localCats.length > 0) {
       _categories = localCats.filter((c) => !deletedCats.has(c.toLowerCase().trim()));
     } else {
       _categories = DEFAULT_CATEGORIES.filter((c) => !deletedCats.has(c.toLowerCase().trim()));
     }
 
-    // 2. Fetch remote Firestore data with timeout protection (max 2.5 seconds)
+    if (localTexts && Object.keys(localTexts).length > 0) {
+      _siteTexts = { ...DEFAULT_SITE_TEXTS, ...localTexts };
+    }
+
+    if (localPackages && localPackages.length > 0) {
+      _packages = localPackages;
+    }
+
+    // 2. Fetch remote Firestore data with timeout protection (max 1.2 seconds)
     try {
       const firestoreJob = (async () => {
         try {
@@ -546,11 +621,15 @@ export async function initializeStore(): Promise<void> {
           ]);
 
           if (admins && admins.length > 0) _admins = admins;
-          if (folders && folders.length > 0) _folders = folders;
+          if (folders && folders.length > 0) {
+            _folders = folders;
+            saveStoredFolders(_folders);
+          }
           if (portfolio && portfolio.length > 0) {
             _portfolio = deduplicatePortfolio(
               portfolio.filter((item) => !deletedCats.has(item.category.toLowerCase().trim()))
             );
+            saveStoredPortfolio(_portfolio);
           }
 
           if (remoteCategories && Array.isArray(remoteCategories) && remoteCategories.length > 0) {
@@ -560,9 +639,11 @@ export async function initializeStore(): Promise<void> {
 
           if (remoteTexts && Object.keys(remoteTexts).length > 0) {
             _siteTexts = { ...DEFAULT_SITE_TEXTS, ...remoteTexts };
+            saveStoredSiteTexts(_siteTexts);
           }
           if (remotePackages && remotePackages.length > 0) {
             _packages = remotePackages;
+            saveStoredPackages(_packages);
           }
         } catch (innerErr) {
           console.warn('Firestore initial fetch non-fatal error:', innerErr);
@@ -752,6 +833,7 @@ export const studioStore = {
 
     await saveFolder(newFolder);
     _folders = [newFolder, ..._folders];
+    saveStoredFolders(_folders);
     notifyListeners();
     return newFolder;
   },
@@ -763,6 +845,7 @@ export const studioStore = {
     const updated = { ..._folders[index], ...updates };
     await updateFolderDoc(id, updates);
     _folders[index] = updated;
+    saveStoredFolders(_folders);
     notifyListeners();
     return updated;
   },
@@ -773,6 +856,7 @@ export const studioStore = {
 
     await removeFolder(id);
     _folders = _folders.filter((f) => f.id !== id);
+    saveStoredFolders(_folders);
     notifyListeners();
     return true;
   },
@@ -785,6 +869,7 @@ export const studioStore = {
     await updateFolderDoc(folderId, { photos: updated.photos });
     const index = _folders.findIndex((f) => f.id === folderId);
     _folders[index] = updated;
+    saveStoredFolders(_folders);
     notifyListeners();
     return updated;
   },
@@ -801,6 +886,7 @@ export const studioStore = {
     await updateFolderDoc(folderId, { photos: updatedPhotos, selections: updatedSelections });
     const index = _folders.findIndex((f) => f.id === folderId);
     _folders[index] = updated;
+    saveStoredFolders(_folders);
     notifyListeners();
     return updated;
   },
@@ -822,6 +908,7 @@ export const studioStore = {
     await updateFolderDoc(folderId, { selections: newSelections });
     const index = _folders.findIndex((f) => f.id === folderId);
     _folders[index] = updated;
+    saveStoredFolders(_folders);
     notifyListeners();
     return updated;
   },
@@ -837,6 +924,7 @@ export const studioStore = {
     await updateFolderDoc(folderId, { selections: newSelections });
     const index = _folders.findIndex((f) => f.id === folderId);
     _folders[index] = updated;
+    saveStoredFolders(_folders);
     notifyListeners();
     return updated;
   },
@@ -895,6 +983,7 @@ export const studioStore = {
 
     const index = _portfolio.findIndex((item) => item.id === eventId);
     _portfolio[index] = updatedEvent;
+    saveStoredPortfolio(_portfolio);
     notifyListeners();
     return updatedEvent;
   },
@@ -916,6 +1005,7 @@ export const studioStore = {
 
     const index = _portfolio.findIndex((item) => item.id === eventId);
     _portfolio[index] = updatedEvent;
+    saveStoredPortfolio(_portfolio);
     notifyListeners();
     return updatedEvent;
   },
@@ -928,6 +1018,7 @@ export const studioStore = {
     await updatePortfolioEvent(eventId, { imageUrl });
     const index = _portfolio.findIndex((item) => item.id === eventId);
     _portfolio[index] = updatedEvent;
+    saveStoredPortfolio(_portfolio);
     notifyListeners();
     return updatedEvent;
   },
@@ -939,6 +1030,7 @@ export const studioStore = {
     const updatedEvent = { ..._portfolio[index], ...updates };
     await updatePortfolioEvent(eventId, updates);
     _portfolio[index] = updatedEvent;
+    saveStoredPortfolio(_portfolio);
     notifyListeners();
     return updatedEvent;
   },
@@ -955,6 +1047,7 @@ export const studioStore = {
       _portfolio = [newEvent, ..._portfolio];
     }
     _portfolio = deduplicatePortfolio(_portfolio);
+    saveStoredPortfolio(_portfolio);
     notifyListeners();
 
     try {
@@ -1031,6 +1124,9 @@ export const studioStore = {
       );
     }
 
+    saveStoredPortfolio(_portfolio);
+    saveStoredFolders(_folders);
+
     // 5. Notify listeners immediately so UI updates synchronously
     notifyListeners();
 
@@ -1048,6 +1144,7 @@ export const studioStore = {
 
     await removePortfolioEvent(eventId);
     _portfolio = _portfolio.filter((item) => item.id !== eventId);
+    saveStoredPortfolio(_portfolio);
     // Note: Deleting a folder does NOT delete the category!
     notifyListeners();
     return true;
@@ -1065,12 +1162,14 @@ export const studioStore = {
 
   async updateSiteText(key: string, value: string): Promise<void> {
     _siteTexts = { ..._siteTexts, [key]: value };
+    saveStoredSiteTexts(_siteTexts);
     notifyListeners();
     await saveSiteTexts(_siteTexts);
   },
 
   async updateSiteTexts(updates: Record<string, string>): Promise<void> {
     _siteTexts = { ..._siteTexts, ...updates };
+    saveStoredSiteTexts(_siteTexts);
     notifyListeners();
     await saveSiteTexts(_siteTexts);
   },
@@ -1092,6 +1191,7 @@ export const studioStore = {
     const newPackages = [..._packages];
     newPackages[idx] = updated;
     _packages = newPackages;
+    saveStoredPackages(_packages);
     notifyListeners();
     await savePricingPackages(_packages);
     return updated;
@@ -1103,6 +1203,7 @@ export const studioStore = {
       id: `pkg-${Date.now()}`,
     };
     _packages = [..._packages, newPkg];
+    saveStoredPackages(_packages);
     notifyListeners();
     await savePricingPackages(_packages);
     return newPkg;
@@ -1112,6 +1213,7 @@ export const studioStore = {
     const exists = _packages.some((p) => p.id === id);
     if (!exists) return false;
     _packages = _packages.filter((p) => p.id !== id);
+    saveStoredPackages(_packages);
     notifyListeners();
     await savePricingPackages(_packages);
     return true;

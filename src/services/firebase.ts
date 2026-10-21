@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyPlaceholderKeyForBuildSafety',
@@ -16,5 +17,16 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+export const storage = getStorage(
+  app,
+  firebaseConfig.storageBucket ? `gs://${firebaseConfig.storageBucket}` : undefined
+);
+export const auth = getAuth(app);
+
+// Attempt anonymous sign-in if enabled in Firebase console (allows auth-required rules to pass)
+signInAnonymously(auth).catch((err) => {
+  console.info('Firebase auth initialization note:', err?.code || err?.message || err);
+});
+
 export default app;
+
