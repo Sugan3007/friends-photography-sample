@@ -123,7 +123,7 @@ export const PhotoDetailModal: React.FC<PhotoDetailModalProps> = ({
                     y="110"
                     className="font-mono text-[9px] tracking-widest fill-amber-300"
                   >
-                    LUMIÈRE ATELIER • ARCHIVAL
+                    FRIENDS PHOTOGRAPHY • ARCHIVAL
                   </text>
                 </pattern>
               </defs>

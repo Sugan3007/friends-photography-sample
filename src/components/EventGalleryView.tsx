@@ -354,7 +354,7 @@ export const EventGalleryView: React.FC<EventGalleryViewProps> = ({
             {currentEvent.images.length} Curated Plates
           </span>
           <span className="text-[10px] font-mono text-stone-500 uppercase">
-            Curated by Lumière Atelier
+            Curated by Friends Photography
           </span>
         </div>
       </section>
@@ -417,7 +417,7 @@ export const EventGalleryView: React.FC<EventGalleryViewProps> = ({
 
                     {/* Watermark Protection Hint */}
                     <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white/50 text-[9px] font-mono tracking-widest uppercase pointer-events-none">
-                      LUMIÈRE ATELIER
+                      FRIENDS PHOTOGRAPHY
                     </span>
                   </div>
 

@@ -91,7 +91,7 @@ export const WatermarkedImage: React.FC<WatermarkedImageProps> = ({
                   y="110"
                   className="font-mono text-[9px] tracking-widest fill-amber-200/70"
                 >
-                  LUMIÈRE FINE ART • PROTECTED
+                  FRIENDS PHOTOGRAPHY • PROTECTED
                 </text>
                 {/* Security fine grid lines */}
                 <line x1="0" y1="0" x2="240" y2="0" stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
@@ -105,7 +105,7 @@ export const WatermarkedImage: React.FC<WatermarkedImageProps> = ({
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center transform -rotate-12 px-4 py-2 border border-white/20 bg-stone-950/30 backdrop-blur-[1px] rounded-lg">
               <span className="block font-serif tracking-[0.25em] text-white/50 text-xs sm:text-sm font-semibold uppercase">
-                LUMIÈRE ATELIER
+                FRIENDS PHOTOGRAPHY
               </span>
               <span className="block font-mono text-[9px] text-amber-300/60 tracking-widest mt-0.5">
                 UNAUTHORIZED COPY PROHIBITED

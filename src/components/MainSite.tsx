@@ -942,7 +942,7 @@ export const MainSite: React.FC<MainSiteProps> = ({
                   <EditableText textKey="contact.emailLabel" defaultText="Email Us" isAdmin={isAdmin} />
                 </span>
                 <span className="text-xs font-medium truncate block">
-                  <EditableText textKey="contact.email" defaultText="concierge@lumierephotoatelier.com" isAdmin={isAdmin} />
+                  <EditableText textKey="contact.email" defaultText="concierge@friendsphotography.com" isAdmin={isAdmin} />
                 </span>
               </div>
             </div>

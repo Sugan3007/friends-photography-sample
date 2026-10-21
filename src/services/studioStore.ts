@@ -182,7 +182,7 @@ const DEFAULT_FOLDERS: ClientFolder[] = [
     eventDate: '2026-03-08',
     targetSelectionCount: 4,
     notes: 'Please review your proofing set and select your favorite 4 photographs.',
-    watermarkText: 'PROOF ONLY — LUMIÈRE ATELIER — DO NOT COPY',
+    watermarkText: 'PROOF ONLY — FRIENDS PHOTOGRAPHY — DO NOT COPY',
     photos: INITIAL_SAMPLE_PHOTOS['folder-wedding-sophia'],
     selections: {
       'photo-w1': { selected: true, note: 'Love the sunset warmth!', selectedAt: '2026-03-11T12:00:00Z' },
@@ -202,7 +202,7 @@ const DEFAULT_FOLDERS: ClientFolder[] = [
     eventDate: '2026-03-12',
     targetSelectionCount: 3,
     notes: 'Select hero campaign visuals for print lookbook.',
-    watermarkText: 'CONFIDENTIAL PROOF — VALMONT × LUMIÈRE',
+    watermarkText: 'CONFIDENTIAL PROOF — FRIENDS PHOTOGRAPHY',
     photos: INITIAL_SAMPLE_PHOTOS['folder-editorial-vogue'],
     selections: {
       'photo-e1': { selected: true, note: 'Selected for main cover.', selectedAt: '2026-03-15T16:20:00Z' },
@@ -223,7 +223,7 @@ const DEFAULT_FOLDERS: ClientFolder[] = [
     eventDate: '2026-03-17',
     targetSelectionCount: 2,
     notes: 'Select 2 headshots for Forbes feature.',
-    watermarkText: 'PROOF ONLY — LUMIÈRE STUDIO — DO NOT REPRODUCE',
+    watermarkText: 'PROOF ONLY — FRIENDS PHOTOGRAPHY — DO NOT REPRODUCE',
     photos: INITIAL_SAMPLE_PHOTOS['folder-portrait-marcus'],
     selections: {},
     selectionSubmitted: false,
@@ -280,8 +280,8 @@ export const STUDIO_PACKAGES: PricingPackage[] = [
 
 export const DEFAULT_SITE_TEXTS: Record<string, string> = {
   // Brand
-  'brand.name': 'Lumière',
-  'brand.subtitle': 'Photo Atelier',
+  'brand.name': 'Friends',
+  'brand.subtitle': 'Photography',
 
   // Hero Section
   'hero.badge': 'Fine Art Atelier',
@@ -310,7 +310,7 @@ export const DEFAULT_SITE_TEXTS: Record<string, string> = {
   'contact.phoneLabel': 'Call Studio',
   'contact.phone': '+1 555-839-2041',
   'contact.emailLabel': 'Email Us',
-  'contact.email': 'concierge@lumierephotoatelier.com',
+  'contact.email': 'concierge@friendsphotography.com',
   'contact.formTitle': 'Send Booking Inquiry',
   'contact.formBtn': 'Submit Inquiry',
 };
@@ -377,7 +377,7 @@ export const PORTFOLIO_SHOWCASE: PortfolioShowcase[] = [
     imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1200&q=80',
     client: 'Seraphine Vance',
     year: '2026',
-    location: 'Lumière Daylight Loft, Zurich',
+    location: 'Friends Photography Daylight Loft, Zurich',
     eventDate: 'February 10, 2026',
     description: 'Stripped back to single-source north-facing window light. Capturing raw emotional stillness.',
     images: [
@@ -594,7 +594,17 @@ export async function initializeStore(): Promise<void> {
     }
 
     if (localTexts && Object.keys(localTexts).length > 0) {
+      if (localTexts['brand.name'] === 'Lumière') {
+        localTexts['brand.name'] = 'Friends';
+      }
+      if (localTexts['brand.subtitle'] === 'Photo Atelier') {
+        localTexts['brand.subtitle'] = 'Photography';
+      }
+      if (localTexts['contact.email'] === 'concierge@lumierephotoatelier.com') {
+        localTexts['contact.email'] = 'concierge@friendsphotography.com';
+      }
       _siteTexts = { ...DEFAULT_SITE_TEXTS, ...localTexts };
+      saveStoredSiteTexts(_siteTexts);
     }
 
     if (localPackages && localPackages.length > 0) {
@@ -638,6 +648,15 @@ export async function initializeStore(): Promise<void> {
           }
 
           if (remoteTexts && Object.keys(remoteTexts).length > 0) {
+            if (remoteTexts['brand.name'] === 'Lumière') {
+              remoteTexts['brand.name'] = 'Friends';
+            }
+            if (remoteTexts['brand.subtitle'] === 'Photo Atelier') {
+              remoteTexts['brand.subtitle'] = 'Photography';
+            }
+            if (remoteTexts['contact.email'] === 'concierge@lumierephotoatelier.com') {
+              remoteTexts['contact.email'] = 'concierge@friendsphotography.com';
+            }
             _siteTexts = { ...DEFAULT_SITE_TEXTS, ...remoteTexts };
             saveStoredSiteTexts(_siteTexts);
           }

@@ -52,16 +52,16 @@ export const Navigation: React.FC<NavigationProps> = ({
                 onNavigateTab('showcase');
               }}
               className="w-8 h-8 rounded-xl bg-stone-900 border border-stone-800 flex items-center justify-center text-amber-400 focus:outline-none hover:border-amber-500/40 transition-colors"
-              aria-label="Lumière Photo Atelier Home"
+              aria-label="Friends Photography Home"
             >
               <Camera className="w-4 h-4" />
             </button>
             <div>
               <span className="block font-serif text-sm font-semibold tracking-[0.18em] text-stone-100 uppercase leading-none">
-                <EditableText textKey="brand.name" defaultText="Lumière" isAdmin={Boolean(currentAdmin) && isEditModeActive} />
+                <EditableText textKey="brand.name" defaultText="Friends" isAdmin={Boolean(currentAdmin) && isEditModeActive} />
               </span>
               <span className="block text-[9px] font-mono tracking-widest text-amber-400/80 uppercase mt-0.5">
-                <EditableText textKey="brand.subtitle" defaultText="Photo Atelier" isAdmin={Boolean(currentAdmin) && isEditModeActive} />
+                <EditableText textKey="brand.subtitle" defaultText="Photography" isAdmin={Boolean(currentAdmin) && isEditModeActive} />
               </span>
             </div>
           </div>

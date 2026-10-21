@@ -1,5 +1,5 @@
 /**
- * Security and authentication utility functions for Lumière Photo Atelier.
+ * Security and authentication utility functions for Friends Photography.
  * Provides password verification, anti-theft shortcut detection, and selection math.
  */
 
